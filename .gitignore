@@ -1,0 +1,15 @@
+/target/
+engine/doomgeneric/
+engine/doom-ascii/
+wad/
+*.raw
+reviews/
+PUBLICATION_READINESS.md
+.savegame/
+
+# npm package build artifacts (built by CI / build-npm.sh)
+npm/engine/doom-mcp-*
+npm/wad/
+npm/README.md
+npm/LICENSE
+npm/CHANGELOG.md

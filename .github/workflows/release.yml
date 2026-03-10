@@ -1,0 +1,122 @@
+name: Build and Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary: doom-mcp-linux-x64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            binary: doom-mcp-linux-arm64
+            cross: true
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            binary: doom-mcp-darwin-x64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            binary: doom-mcp-darwin-arm64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary: doom-mcp-win32-x64.exe
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clone doomgeneric
+        run: |
+          git clone https://github.com/ozkl/doomgeneric.git engine/doomgeneric
+          cd engine/doomgeneric
+          git checkout fc601639494e089702a1ada082eb51aaafc03722
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross-compilation tools (Linux ARM64)
+        if: matrix.cross
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+          CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
+
+      - name: Run tests
+        if: ${{ !matrix.cross }}
+        run: cargo test
+
+      - name: Copy binary (unix)
+        if: matrix.os != 'windows-latest'
+        run: cp target/${{ matrix.target }}/release/doom-mcp npm/engine/${{ matrix.binary }}
+
+      - name: Copy binary (windows)
+        if: matrix.os == 'windows-latest'
+        run: cp target/${{ matrix.target }}/release/doom-mcp.exe npm/engine/${{ matrix.binary }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.binary }}
+          path: npm/engine/${{ matrix.binary }}
+
+  package:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: npm/engine/
+          merge-multiple: true
+
+      - name: Download Freedoom WAD
+        run: |
+          mkdir -p npm/wad
+          curl -fSL "https://github.com/freedoom/freedoom/releases/download/v0.13.0/freedoom-0.13.0.zip" -o /tmp/freedoom.zip
+          unzip -q /tmp/freedoom.zip -d /tmp/freedoom
+          cp /tmp/freedoom/freedoom-0.13.0/freedoom1.wad npm/wad/
+
+      - name: Set binary permissions
+        run: chmod +x npm/engine/doom-mcp-*
+
+      - name: Copy docs to npm package
+        run: |
+          cp README.md npm/
+          cp LICENSE npm/
+          cp CHANGELOG.md npm/
+
+      - name: Show package contents
+        run: ls -lh npm/engine/ npm/wad/
+
+      - name: Upload npm package
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-package
+          path: npm/
+
+      - name: Publish to npm
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          cd npm
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
+          npm publish --access public
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

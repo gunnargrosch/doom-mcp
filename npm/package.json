@@ -1,0 +1,22 @@
+{
+  "name": "doom-mcp",
+  "version": "0.1.0",
+  "description": "Play DOOM via MCP - works with Claude Code, Cursor, and any MCP client",
+  "license": "MIT",
+  "keywords": ["doom", "mcp", "model-context-protocol", "game", "claude-code", "ai"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gunnargrosch/doom-mcp"
+  },
+  "bin": {
+    "doom-mcp": "./bin/doom-mcp.js"
+  },
+  "files": [
+    "bin/",
+    "engine/",
+    "wad/"
+  ],
+  "scripts": {
+    "postinstall": "node bin/postinstall.js"
+  }
+}

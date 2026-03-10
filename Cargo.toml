@@ -1,0 +1,18 @@
+[package]
+name = "doom-mcp"
+version = "0.1.0"
+edition = "2021"
+description = "Play DOOM via MCP - works with Claude Code, Cursor, and any MCP client"
+license = "MIT"
+repository = "https://github.com/gunnargrosch/doom-mcp"
+keywords = ["doom", "mcp", "model-context-protocol", "game"]
+categories = ["games", "command-line-utilities"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+flate2 = "1"
+libc = "0.2"
+
+[build-dependencies]
+cc = "1"
