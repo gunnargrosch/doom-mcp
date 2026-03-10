@@ -20,12 +20,12 @@ fn send(msg: &str) {
     let mut off = 0;
     while off < bytes.len() {
         let n = unsafe {
-            libc::write(1, bytes[off..].as_ptr() as *const libc::c_void, bytes.len() - off)
+            libc::write(1, bytes[off..].as_ptr() as *const libc::c_void, (bytes.len() - off) as _)
         };
         if n <= 0 { break; }
         off += n as usize;
     }
-    unsafe { libc::write(1, b"\n".as_ptr() as *const libc::c_void, 1); }
+    unsafe { libc::write(1, b"\n".as_ptr() as *const libc::c_void, 1 as _); }
 }
 
 fn main() {
