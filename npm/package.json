@@ -6,15 +6,16 @@
   "keywords": ["doom", "mcp", "model-context-protocol", "game", "claude-code", "ai"],
   "repository": {
     "type": "git",
-    "url": "https://github.com/gunnargrosch/doom-mcp"
+    "url": "git+https://github.com/gunnargrosch/doom-mcp.git"
   },
   "bin": {
-    "doom-mcp": "./bin/doom-mcp.js"
+    "doom-mcp": "bin/doom-mcp.js"
   },
   "files": [
     "bin/",
     "engine/",
-    "wad/"
+    "wad/",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "postinstall": "node bin/postinstall.js"
