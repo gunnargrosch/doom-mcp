@@ -21,7 +21,7 @@ Play DOOM in Claude Code, Cursor, or any MCP-compatible client. The AI sees the 
   Sprinting down the hallway... I can see an opening ahead.
 
   HP:100 Armor:0 | Pistol (key:2) | Ammo: 50b 0s 0r 0c | Kills:0 | E1M1
-  ENEMIES IN SIGHT: Imp (HP:60) 30deg LEFT dist:400
+  ENEMIES IN SIGHT: Imp (HP:60) to your left (turn_left ~9) nearby
 
   There's an Imp to the left! Turning to face it...
 
@@ -30,7 +30,7 @@ Play DOOM in Claude Code, Cursor, or any MCP-compatible client. The AI sees the 
   Aimed and firing!
 
   HP:100 Armor:0 | Pistol (key:2) | Ammo: 47b 0s 0r 0c | Kills:0 | E1M1
-  ENEMIES IN SIGHT: Imp (HP:15) AHEAD dist:350
+  ENEMIES IN SIGHT: Imp (HP:15) AHEAD close
 
   Hit! The Imp is wounded (HP:15). One more burst should finish it.
 
@@ -60,9 +60,10 @@ Play DOOM in Claude Code, Cursor, or any MCP-compatible client. The AI sees the 
 A Rust MCP server embeds the real DOOM engine (doomgeneric) directly via FFI. No emulation, no child processes. Each tool call advances the game by a number of ticks and returns:
 
 1. **Game state** - HP, armor, ammo, kills, position, current weapon
-2. **Enemy intel** - visible enemies with direction, distance, and HP
+2. **Enemy intel** - visible enemies with human-readable direction, distance, and HP
 3. **Nearby items** - health, ammo, armor, weapons within pickup range
-4. **Frame image** - small PNG for the AI's vision (not displayed to users)
+4. **Doors and switches** - interactable linedefs detected within range
+5. **Frame image** - small PNG thumbnail for the AI's vision
 
 The AI uses this information to navigate, fight, and explore. You can direct it or let it play autonomously.
 
@@ -209,7 +210,7 @@ Yes. The npm package includes a Windows x64 binary. Register it the same way as 
 Yes. Set `DOOM_WAD_PATH` in your MCP config. The shareware `DOOM1.WAD` is free to download from [doomworld.com](https://www.doomworld.com/classicdoom/info/shareware.php) and has much better levels than the bundled Freedoom. See the [Configuration](#configuration) section for details.
 
 **How much does this cost in API tokens?**
-Each `doom_action` call returns ~1-2KB of text (game state + enemy info) plus a ~2KB PNG image. That's roughly 600-1000 tokens per action. A typical gameplay session of 50 actions uses about 30,000-50,000 tokens.
+Each `doom_action` call returns ~1-2KB of text (game state + enemy info) plus a ~6KB PNG thumbnail. That's roughly 1,500-2,500 tokens per action. A typical gameplay session of 50 actions uses about 75,000-125,000 tokens.
 
 **Can the AI actually play DOOM well?**
 It can navigate levels, find enemies, aim, and fight. It gets about 5-10 kills per session on E1M1 at medium difficulty. It struggles with enemies behind partial cover and navigating complex door sequences. It improves when you direct it.
@@ -233,11 +234,11 @@ No. Enemy detection uses DOOM's native line-of-sight check (`P_CheckSight`). The
 ```
 src/main.rs         MCP JSON-RPC server over stdio
 src/doom.rs         Engine FFI wrapper: init, tick, frame capture, state extraction
-src/renderer.rs     PNG rendering (64-color palette for MCP, full RGB for screenshots)
+src/renderer.rs     PNG rendering (216-color palette thumbnails for MCP, full RGB for screenshots)
 src/paths.rs        WAD file discovery across platforms
 src/log.rs          Debug logging to file
 build.rs            Compiles doomgeneric C sources via cc crate (whitelist approach)
-csrc/platform.c     DG_ callbacks, virtual time, key injection, enemy/item detection
+csrc/platform.c     DG_ callbacks, virtual time, key injection, enemy/item/door detection
 ```
 
 The binary links the doomgeneric C engine at compile time. At runtime it is a single process with no subprocess spawning. Frames are read from a shared screen buffer and key inputs are injected through FFI.
@@ -279,7 +280,7 @@ Build the npm package locally:
 
 ```sh
 bash scripts/build-npm.sh   # copies binary + WAD into npm/
-cd npm && npm pack           # creates doom-mcp-0.1.0.tgz
+cd npm && npm pack           # creates doom-mcp-0.1.2.tgz
 ```
 
 Publish (requires npm account + `NPM_TOKEN` for CI):

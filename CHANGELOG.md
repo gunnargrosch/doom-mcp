@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-03-11
+
+### Added
+
+- Door and switch detection: nearby usable linedefs (doors, locked doors, exit switches) are reported as `NEARBY: Door AHEAD (use to activate)` so the AI knows when to press `use`
+- Stuck detection: warns after 2+ consecutive movement ticks with no position change (`STUCK — try: turn, strafe, or use on nearby walls`)
+- Point-blank danger warning: enemies within melee range are flagged with `⚠ TOO CLOSE — strafe and back away!`
+- Stale fire detection: warns when the most-ahead enemy takes no damage after 3+ consecutive fire ticks, suggesting the enemy may be behind cover
+- Low-HP escape hint: at critical HP the server now suggests `strafe_left/strafe_right,backward,run` rather than turning in place
+
+### Improved
+
+- Directions replaced raw degree values with natural language: `slightly to your left`, `to your right`, `hard left`, `behind you to the right`, etc. Turn hints remain in parentheses for AI navigation
+- Distances replaced raw map units with bucketed labels: `point-blank`, `close`, `nearby`, `far`, `very far`
+- RECEDING items are auto-suppressed after 2 consecutive ticks of receding — unreachable items no longer distract the AI
+- Thumbnail upgraded from 160×100 (64-color) to 200×125 (216-color web-safe palette) for significantly better color fidelity with modest token increase
+
 ## [0.1.1] - 2026-03-11
 
 ### Fixed
