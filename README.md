@@ -1,5 +1,9 @@
 # DOOM via MCP
 
+[![npm version](https://img.shields.io/npm/v/doom-mcp)](https://www.npmjs.com/package/doom-mcp)
+[![npm downloads](https://img.shields.io/npm/dm/doom-mcp)](https://www.npmjs.com/package/doom-mcp)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 **Can it run DOOM? Yes - your AI coding assistant can run DOOM.**
 
 Play DOOM in Claude Code, Cursor, or any MCP-compatible client. The AI sees the game, fights demons, navigates levels, and reports what's happening - or you direct it move by move.
