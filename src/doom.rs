@@ -64,6 +64,7 @@ extern "C" {
     fn mcp_advance_tick();
     fn mcp_get_enemies(enemies: *mut EnemyInfo, max_count: c_int) -> c_int;
     fn mcp_get_items(items: *mut ItemInfo, max_count: c_int) -> c_int;
+    fn mcp_new_game(skill: c_int, episode: c_int, map: c_int);
 }
 
 pub struct Engine {
@@ -196,6 +197,15 @@ impl Engine {
         let count = unsafe { mcp_get_items(items.as_mut_ptr(), MAX_ITEMS as c_int) };
         items.truncate(count as usize);
         items
+    }
+
+    pub fn restart(&mut self, skill: i32, episode: i32, map: i32) {
+        debug!("engine: restarting skill={} episode={} map={}", skill, episode, map);
+        unsafe { mcp_new_game(skill as c_int, episode as c_int, map as c_int); }
+        // Run enough ticks for the new game to load
+        self.tick(35, &[]);
+        self.tick(35, &[]);
+        self.tick(35, &[]);
     }
 
     pub fn validate_actions(actions: &[&str]) -> Vec<String> {

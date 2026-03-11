@@ -1,6 +1,6 @@
 {
   "name": "doom-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Play DOOM via MCP - works with Claude Code, Cursor, and any MCP client",
   "license": "MIT",
   "keywords": ["doom", "mcp", "model-context-protocol", "game", "claude-code", "ai"],

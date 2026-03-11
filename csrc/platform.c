@@ -108,6 +108,14 @@ uint32_t DG_GetTicksMs(void)
     return get_time_ms() - start_ms;
 }
 
+/* Start a new game on the given skill/episode/map.
+ * Uses G_DeferedInitNew — the same path as the in-game "New Game" menu. */
+void mcp_new_game(int skill, int episode, int map)
+{
+    extern void G_DeferedInitNew(int skill, int episode, int map);
+    G_DeferedInitNew(skill, episode, map);
+}
+
 /* Switch to virtual time (call after doomgeneric_Create) */
 void mcp_enable_virtual_time(void)
 {
