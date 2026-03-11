@@ -80,15 +80,7 @@ graph LR
 
 ## Quick Start
 
-### 1. Install
-
-No build tools required. Binaries are bundled in the npm package.
-
-```sh
-npx -y doom-mcp
-```
-
-### 2. Register with your MCP client
+### 1. Register with your MCP client
 
 **Claude Code:**
 
@@ -110,7 +102,7 @@ claude mcp add doom -- npx -y doom-mcp
 }
 ```
 
-### 3. Play
+### 2. Play
 
 Open a new session and say:
 
