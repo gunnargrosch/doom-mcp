@@ -85,7 +85,7 @@ graph LR
 **Claude Code:**
 
 ```sh
-claude mcp add doom -- npx -y doom-mcp
+claude mcp add doom --scope user -- npx -y doom-mcp
 ```
 
 **Cursor, Windsurf, or any MCP client** - add to `.mcp.json`:
@@ -263,13 +263,13 @@ cargo test                  # runs unit + integration tests
 Register the local build for testing:
 
 ```sh
-claude mcp add doom -- ./target/release/doom-mcp
+claude mcp add doom --scope user -- ./target/release/doom-mcp
 ```
 
 Enable debug logging:
 
 ```sh
-claude mcp add doom -e DOOM_MCP_DEBUG=1 -- ./target/release/doom-mcp
+claude mcp add doom --scope user -e DOOM_MCP_DEBUG=1 -- ./target/release/doom-mcp
 tail -f /tmp/doom-mcp.log   # Linux/macOS (Windows: %TEMP%\doom-mcp.log)
 ```
 
