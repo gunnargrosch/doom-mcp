@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-03-11
+
+### Fixed
+
+- Windows build: platform.c now compiles on MSVC (added `#ifdef _WIN32` for timing functions)
+- Windows build: `libc::write` count parameter uses platform-correct type
+- Screenshot path uses system temp directory instead of hardcoded `/tmp/` (fixes Windows)
+- Screenshot viewer supports Windows (`cmd /c start`)
+- CI pipeline: create `npm/engine/` directory before copying binaries
+- CI pipeline: copy README/LICENSE/CHANGELOG to npm package before publish
+- Tool schema: `ticks` maximum now correctly shows 105 (was 35)
+
+### Improved
+
+- AI vision thumbnails increased from 80x50 to 160x100 (~2KB per frame) for much better scene recognition
+- Item tracking shows CLOSING/RECEDING distance changes to help AI navigate to pickups
+- Items filtered by field of view (±45°) — only items visible on screen are reported
+- Turn hints added to item/enemy output (e.g. `turn_left ~11 ticks`) for precise aiming
+- Reach hints added to item output (e.g. `~18 ticks fwd+run to reach`) to prevent overshooting
+- `doom_start` now restarts an in-progress game in-place using DOOM's native new-game mechanism — no need to start a new session to play again
+
+### Removed
+
+- Dead `doom_look` tool handler (was not advertised in tools/list)
+
 ## [0.1.0] - 2026-03-10
 
 ### Added

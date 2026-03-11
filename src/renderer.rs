@@ -3,8 +3,8 @@ use flate2::write::ZlibEncoder;
 use flate2::Compression;
 use std::io::Write;
 
-const THUMBNAIL_WIDTH: u32 = 80;
-const THUMBNAIL_HEIGHT: u32 = 50;
+const THUMBNAIL_WIDTH: u32 = 160;
+const THUMBNAIL_HEIGHT: u32 = 100;
 const PALETTE_COLORS: usize = 64;
 
 // --- Frame Scaling ---

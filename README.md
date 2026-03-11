@@ -129,7 +129,7 @@ The AI will ask which mode you want, start the game on E1M1, and begin playing.
 
 ### doom_start
 
-Start the DOOM engine. Call this before any other game tool.
+Start or restart DOOM. Safe to call at any time — if a game is already running it restarts cleanly without needing a new session.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -154,7 +154,7 @@ Advance the game. All listed actions are held simultaneously for the tick durati
 
 ### doom_screenshot
 
-Save a full-resolution 320x200 screenshot to `/tmp/doom-screenshot.png` and open it in the system image viewer. Does not advance the game (beyond a brief pause for the frame to settle).
+Save a full-resolution 320x200 screenshot to the system temp directory and open it in the default image viewer. Does not advance the game (beyond a brief pause for the frame to settle).
 
 ---
 
@@ -163,7 +163,7 @@ Save a full-resolution 320x200 screenshot to `/tmp/doom-screenshot.png` and open
 | Environment Variable | Description |
 |---------------------|-------------|
 | `DOOM_WAD_PATH` | Path to a custom IWAD file (e.g., your own `DOOM.WAD` or `DOOM2.WAD`) |
-| `DOOM_MCP_DEBUG` | Set to `1` to enable debug logging to `/tmp/doom-mcp.log` |
+| `DOOM_MCP_DEBUG` | Set to `1` to enable debug logging to `doom-mcp.log` in the system temp directory |
 
 The bundled Freedoom WAD works out of the box, but the original DOOM shareware WAD has better levels and sprites. To use it:
 
@@ -213,7 +213,7 @@ Yes. The npm package includes a Windows x64 binary. Register it the same way as 
 Yes. Set `DOOM_WAD_PATH` in your MCP config. The shareware `DOOM1.WAD` is free to download from [doomworld.com](https://www.doomworld.com/classicdoom/info/shareware.php) and has much better levels than the bundled Freedoom. See the [Configuration](#configuration) section for details.
 
 **How much does this cost in API tokens?**
-Each `doom_action` call returns ~1-2KB of text (game state + enemy info) plus a ~1KB PNG image. That's roughly 500-800 tokens per action. A typical gameplay session of 50 actions uses about 25,000-40,000 tokens.
+Each `doom_action` call returns ~1-2KB of text (game state + enemy info) plus a ~2KB PNG image. That's roughly 600-1000 tokens per action. A typical gameplay session of 50 actions uses about 30,000-50,000 tokens.
 
 **Can the AI actually play DOOM well?**
 It can navigate levels, find enemies, aim, and fight. It gets about 5-10 kills per session on E1M1 at medium difficulty. It struggles with enemies behind partial cover and navigating complex door sequences. It improves when you direct it.
@@ -274,7 +274,7 @@ Enable debug logging:
 
 ```sh
 claude mcp add doom -e DOOM_MCP_DEBUG=1 -- ./target/release/doom-mcp
-tail -f /tmp/doom-mcp.log   # in another terminal
+tail -f /tmp/doom-mcp.log   # Linux/macOS (Windows: %TEMP%\doom-mcp.log)
 ```
 
 ### npm Package
@@ -301,6 +301,10 @@ cd npm && npm publish
 - [id Software](https://github.com/id-Software/DOOM) - the original DOOM (GPL-2.0)
 
 ---
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes.
 
 ## License
 

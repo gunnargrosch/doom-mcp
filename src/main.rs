@@ -124,7 +124,7 @@ fn handle_tools_list() -> Value {
         "tools": [
             {
                 "name": "doom_start",
-                "description": "Start DOOM. This is the PRIMARY tool - use this whenever someone says 'play doom', 'let's play doom', 'launch doom', etc.\n\nBefore calling, ask the user:\n1. 'I direct' - user gives commands, you execute with doom_action\n2. 'You play' - you play autonomously with doom_action\n\nAfter starting, use doom_action to play. Describe what happens each turn.",
+                "description": "Start or restart DOOM. Use this whenever someone says 'play doom', 'new game', 'restart', 'start over', etc. Safe to call even if a game is already running — it will restart cleanly.\n\nBefore calling, ask the user:\n1. 'I direct' - user gives commands, you execute with doom_action\n2. 'You play' - you play autonomously with doom_action\n\nAfter starting, use doom_action to play. Describe what happens each turn.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -208,22 +208,30 @@ fn handle_tool_call(params: &Value, engine: &mut Option<doom::Engine>, tracker: 
             eng.tick(SCREENSHOT_SETTLE_TICKS, &[]);
             let frame = eng.get_frame();
             let png = renderer::render_png_full(&frame);
-            let path = "/tmp/doom-screenshot.png";
-            if let Err(e) = std::fs::write(path, &png) {
+            let path = std::env::temp_dir().join("doom-screenshot.png");
+            let path_str = path.to_string_lossy().to_string();
+            if let Err(e) = std::fs::write(&path, &png) {
                 return tool_error(&format!("Failed to save screenshot: {e}"));
             }
-            debug!("screenshot saved to {} ({} bytes)", path, png.len());
+            debug!("screenshot saved to {} ({} bytes)", path_str, png.len());
 
             // Auto-open with system viewer
-            let openers = ["wslview", "xdg-open", "open"];
+            let openers = ["wslview", "xdg-open", "open", "cmd"];
             for opener in &openers {
-                if std::process::Command::new(opener)
-                    .arg(path)
-                    .stdout(std::process::Stdio::null())
-                    .stderr(std::process::Stdio::null())
-                    .spawn()
-                    .is_ok()
-                {
+                let result = if *opener == "cmd" {
+                    std::process::Command::new("cmd")
+                        .args(["/c", "start", "", &path_str])
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null())
+                        .spawn()
+                } else {
+                    std::process::Command::new(opener)
+                        .arg(&path_str)
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null())
+                        .spawn()
+                };
+                if result.is_ok() {
                     debug!("screenshot opened with {}", opener);
                     break;
                 }
@@ -233,26 +241,27 @@ fn handle_tool_call(params: &Value, engine: &mut Option<doom::Engine>, tracker: 
             let enemies = eng.get_enemies();
             tool_text(&format!(
                 "Screenshot saved to {}\n{}\n{}",
-                path,
+                path_str,
                 format_state(&state),
                 format_enemies(&enemies, tracker),
             ))
         }
 
         "doom_start" => {
-            if engine.is_some() {
-                // Engine already running - just return current frame
-                let eng = engine.as_ref().unwrap();
-                let _width = args
-                    .get("width")
-                    .and_then(|v| v.as_i64())
-                    .unwrap_or(0) as u32;
+            let skill = args.get("skill").and_then(|v| v.as_i64()).unwrap_or(3) as i32;
+            let episode = args.get("episode").and_then(|v| v.as_i64()).unwrap_or(1) as i32;
+            let map = args.get("map").and_then(|v| v.as_i64()).unwrap_or(1) as i32;
+
+            if let Some(eng) = engine.as_mut() {
+                // Engine already running — restart in-place using G_DeferedInitNew
+                *tracker = GameTracker::new();
+                eng.restart(skill, episode, map);
                 return make_frame_response(eng, tracker);
             }
 
-            let skill = Some(args.get("skill").and_then(|v| v.as_i64()).unwrap_or(3) as i32);
-            let episode = Some(args.get("episode").and_then(|v| v.as_i64()).unwrap_or(1) as i32);
-            let map = Some(args.get("map").and_then(|v| v.as_i64()).unwrap_or(1) as i32);
+            let skill = Some(skill);
+            let episode = Some(episode);
+            let map = Some(map);
             let _width = args
                 .get("width")
                 .and_then(|v| v.as_i64())
@@ -344,6 +353,7 @@ struct GameTracker {
     screenshot_offered: i32,
     recent_enemies: Vec<(String, i32, i32, i32)>, // (name, hp, angle, dist)
     recent_enemy_age: i32,
+    last_item_dists: Vec<(i32, i32)>, // (item_type, distance) from previous tick
 }
 
 impl GameTracker {
@@ -356,6 +366,7 @@ impl GameTracker {
             screenshot_offered: 0,
             recent_enemies: Vec::new(),
             recent_enemy_age: 0,
+            last_item_dists: Vec::new(),
         }
     }
 }
@@ -370,7 +381,7 @@ fn make_frame_response(engine: &doom::Engine, tracker: &mut GameTracker) -> Valu
     let png_b64 = renderer::base64_encode(&png);
     let state_text = format_state(&state);
     let enemy_text = format_enemies(&enemies, tracker);
-    let item_text = format_items(&items, &state);
+    let item_text = format_items(&items, &state, tracker);
 
     debug!("STATE: {}", state_text);
     debug!("{}", enemy_text);
@@ -520,26 +531,49 @@ fn item_name(t: i32) -> Option<&'static str> {
     }
 }
 
-fn format_items(items: &[doom::ItemInfo], state: &doom::GameState) -> String {
+fn format_items(items: &[doom::ItemInfo], state: &doom::GameState, tracker: &mut GameTracker) -> String {
     if items.is_empty() {
+        tracker.last_item_dists.clear();
         return String::new();
     }
 
     let mut parts: Vec<String> = Vec::new();
+    let mut new_dists: Vec<(i32, i32)> = Vec::new();
+
     for item in items {
+        // Only show items within the player's field of view (90deg FOV = ±45deg)
+        if item.angle.abs() > 45 { continue; }
+
         if let Some(name) = item_name(item.item_type) {
-            // Filter: only show items the player needs
             let dominated = match item.item_type {
-                43 | 53 | 45 | 46 | 58 => state.health >= 100, // health items when full
-                44 | 54 | 55 | 63 => state.armor >= 100,       // armor items when full
+                43 | 53 | 45 | 46 | 58 => state.health >= 100,
+                44 | 54 | 55 | 63 => state.armor >= 100,
                 _ => false,
             };
             if dominated { continue; }
 
             let dir = format_dir(item.angle);
-            parts.push(format!("{} {} dist:{}", name, dir, item.distance));
+
+            // Show distance change from last tick
+            let delta = tracker.last_item_dists.iter()
+                .find(|(t, _)| *t == item.item_type)
+                .map(|(_, prev_dist)| item.distance - prev_dist);
+
+            let delta_str = match delta {
+                Some(d) if d < -10 => " CLOSING",
+                Some(d) if d > 10 => " RECEDING",
+                _ => "",
+            };
+
+            // ~16 units/tick running, ~8 walking. Suggest ticks to reach.
+            let run_ticks = (item.distance as f32 / 16.0).ceil() as i32;
+            let reach_hint = format!(" (~{} ticks fwd+run to reach)", run_ticks);
+            parts.push(format!("{} {} dist:{}{}{}", name, dir, item.distance, delta_str, reach_hint));
+            new_dists.push((item.item_type, item.distance));
         }
     }
+
+    tracker.last_item_dists = new_dists;
 
     if parts.is_empty() {
         return String::new();
@@ -549,12 +583,14 @@ fn format_items(items: &[doom::ItemInfo], state: &doom::GameState) -> String {
 }
 
 fn format_dir(angle: i32) -> String {
+    // ~3.2 degrees per tick of turning
+    let ticks_hint = (angle.abs() as f32 / 3.2).round() as i32;
     if angle.abs() <= 10 {
         "AHEAD".into()
     } else if angle > 0 {
-        format!("{}deg LEFT", angle)
+        format!("{}deg LEFT(turn_left ~{} ticks)", angle, ticks_hint)
     } else {
-        format!("{}deg RIGHT", -angle)
+        format!("{}deg RIGHT(turn_right ~{} ticks)", -angle, ticks_hint)
     }
 }
 
