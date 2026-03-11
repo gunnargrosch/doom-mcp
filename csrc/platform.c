@@ -29,6 +29,7 @@
 #include "p_mobj.h"
 #include "p_local.h"
 #include "r_main.h"
+#include "r_state.h"
 #include "p_tick.h"
 #include "info.h"
 #include "i_sound.h"
@@ -312,6 +313,83 @@ int mcp_get_items(mcp_item_info_t *items, int max_count)
         items[count].type     = (int)mo->type;
         items[count].distance = dist;
         items[count].angle    = rel_angle;
+        count++;
+    }
+
+    return count;
+}
+
+/* ---- Interactable Detection (doors, switches, exits) ---- */
+
+typedef struct {
+    int type;      /* 0=door, 1=locked_door, 2=exit */
+    int key;       /* 0=none, 1=blue, 2=red, 3=yellow */
+    int distance;
+    int angle;     /* relative to player facing */
+} mcp_interactable_t;
+
+#define MAX_INTERACTABLES 8
+
+/* Classify a line special as manually-usable (push/use) by the player.
+ * Returns the type (0/1/2) or -1 if not manually usable (walk/gun triggers). */
+static int classify_line_special(int special, int *key_color)
+{
+    *key_color = 0;
+    switch (special) {
+        /* DR/D1 push doors — no key */
+        case 1: case 31: case 61: case 63: case 117: case 118:
+            return 0;
+        /* Keyed push doors */
+        case 26: case 32: *key_color = 1; return 1; /* blue  */
+        case 28: case 33: *key_color = 2; return 1; /* red   */
+        case 27: case 34: *key_color = 3; return 1; /* yellow */
+        /* Switch-activated doors (S1/SR — player presses a wall switch) */
+        case 29: case 42: case 50:
+            return 0;
+        /* Exit switches */
+        case 11: case 51:
+            return 2;
+        default:
+            return -1; /* walk / gun trigger — not manually usable */
+    }
+}
+
+int mcp_get_interactables(mcp_interactable_t *out, int max_count)
+{
+    player_t *p = &players[consoleplayer];
+    if (!p->mo) return 0;
+
+    int count = 0;
+
+    for (int i = 0; i < numlines && count < max_count; i++) {
+        line_t *line = &lines[i];
+        if (!line->special) continue;
+
+        int key = 0;
+        int type = classify_line_special((int)line->special, &key);
+        if (type < 0) continue;
+
+        /* Line midpoint in fixed-point */
+        fixed_t mx = line->v1->x / 2 + line->v2->x / 2;
+        fixed_t my = line->v1->y / 2 + line->v2->y / 2;
+
+        fixed_t dx = mx - p->mo->x;
+        fixed_t dy = my - p->mo->y;
+        int dist = P_AproxDistance(dx, dy) >> FRACBITS;
+
+        if (dist > 400) continue;
+
+        angle_t abs_angle = R_PointToAngle2(p->mo->x, p->mo->y, mx, my);
+        int rel_angle = (int)((abs_angle - p->mo->angle) >> 24);
+        rel_angle = rel_angle * 360 / 256;
+        if (rel_angle > 180) rel_angle -= 360;
+
+        if (rel_angle < -60 || rel_angle > 60) continue;
+
+        out[count].type     = type;
+        out[count].key      = key;
+        out[count].distance = dist;
+        out[count].angle    = rel_angle;
         count++;
     }
 

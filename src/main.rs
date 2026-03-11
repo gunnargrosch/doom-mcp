@@ -157,7 +157,7 @@ fn handle_tools_list() -> Value {
             },
             {
                 "name": "doom_action",
-                "description": "Perform actions in DOOM. All actions held simultaneously for the tick duration.\n\nActions: forward, backward, turn_left, turn_right, strafe_left, strafe_right, fire, use, run, 1-7\n\nFIRE: 'fire' once = hold fire. Pistol auto-fires every ~10 ticks. Do NOT repeat 'fire'.\n\nRULES:\n1. ONLY fire when enemies in sight and angle near 0. NEVER combine turn+fire.\n2. To reach an item/enemy: turn to face it (get angle to ~0) in ONE action, then 'forward,run' in the NEXT. Don't spiral - 2 actions max.\n3. Items are picked up by walking over them. If item distance isn't decreasing, it may be unreachable (elevated platform) - skip it.\n4. 'use' opens doors. Try on walls when exploring.\n5. In 'I direct' mode: ONE action, describe surroundings vividly, then WAIT.\n6. Use big ticks for movement (20-35). Small ticks (2-5) for precise aiming only.\n7. Items only shown when player needs them (health items hidden at full HP).",
+                "description": "Perform actions in DOOM. All actions held simultaneously for the tick duration.\n\nActions: forward, backward, turn_left, turn_right, strafe_left, strafe_right, fire, use, run, 1-7\n\nFIRE: 'fire' once = hold fire. Pistol auto-fires every ~10 ticks. Do NOT repeat 'fire'.\n\nRULES:\n1. ONLY fire when enemies in sight and angle near 0. NEVER combine turn+fire.\n2. To reach an item/enemy: turn to face it (get angle to ~0) in ONE action, then 'forward,run' in the NEXT. Don't spiral - 2 actions max.\n3. RECEDING items are auto-hidden after 2 ticks — if an item disappears, it was unreachable. Don't chase it.\n4. Doors and switches appear as NEARBY — press 'use' while facing them to open/activate.\n5. In 'I direct' mode: ONE action, describe surroundings vividly, then WAIT.\n6. Use big ticks for movement (20-35). Small ticks (2-5) for precise aiming only.\n7. Items only shown when player needs them (health items hidden at full HP).\n8. SAFETY: Never advance within close range of a healthy Imp or Pinky Demon — they deal massive melee damage. Stay at nearby range or farther and strafe.\n9. ESCAPE: When low HP, use 'strafe_left,backward,run' or 'strafe_right,backward,run' — do NOT turn in place while retreating.\n10. If an enemy is not taking damage after 3+ shots, it may be behind cover — reposition rather than wasting ammo.",
                 "inputSchema": {
                     "type": "object",
                     "required": ["actions"],
@@ -243,7 +243,7 @@ fn handle_tool_call(params: &Value, engine: &mut Option<doom::Engine>, tracker: 
                 "Screenshot saved to {}\n{}\n{}",
                 path_str,
                 format_state(&state),
-                format_enemies(&enemies, tracker),
+                format_enemies(&enemies, tracker, false),
             ))
         }
 
@@ -279,7 +279,7 @@ fn handle_tool_call(params: &Value, engine: &mut Option<doom::Engine>, tracker: 
                     let state = eng.get_state();
                     let enemies = eng.get_enemies();
                     let state_text = format_state(&state);
-                    let enemy_text = format_enemies(&enemies, tracker);
+                    let enemy_text = format_enemies(&enemies, tracker, false);
 
                     let startup = format!(
                         "{}\n\n{}\n{}",
@@ -318,8 +318,13 @@ fn handle_tool_call(params: &Value, engine: &mut Option<doom::Engine>, tracker: 
 
             let action_warnings = doom::Engine::validate_actions(&actions);
 
+            let attempted_movement = actions.iter().any(|a| {
+                matches!(*a, "forward" | "backward" | "strafe_left" | "strafe_right")
+            });
+            let is_firing = actions.iter().any(|a| *a == "fire");
+
             eng.tick(ticks, &actions);
-            let mut response = make_frame_response(eng, tracker);
+            let mut response = make_frame_response_with_actions(eng, tracker, attempted_movement, is_firing);
 
             if !action_warnings.is_empty() {
                 if let Some(content) = response.get_mut("content") {
@@ -353,7 +358,11 @@ struct GameTracker {
     screenshot_offered: i32,
     recent_enemies: Vec<(String, i32, i32, i32)>, // (name, hp, angle, dist)
     recent_enemy_age: i32,
-    last_item_dists: Vec<(i32, i32)>, // (item_type, distance) from previous tick
+    last_item_dists: Vec<(i32, i32, i32)>, // (item_type, distance, receding_ticks)
+    last_x: i32,
+    last_y: i32,
+    stuck_ticks: i32,
+    ahead_enemy: Option<(i32, i32, i32)>, // (enemy_type, hp, stale_ticks)
 }
 
 impl GameTracker {
@@ -367,32 +376,58 @@ impl GameTracker {
             recent_enemies: Vec::new(),
             recent_enemy_age: 0,
             last_item_dists: Vec::new(),
+            last_x: i32::MIN,
+            last_y: i32::MIN,
+            stuck_ticks: 0,
+            ahead_enemy: None,
         }
     }
 }
 
 fn make_frame_response(engine: &doom::Engine, tracker: &mut GameTracker) -> Value {
+    make_frame_response_with_actions(engine, tracker, false, false)
+}
+
+fn make_frame_response_with_actions(engine: &doom::Engine, tracker: &mut GameTracker, attempted_movement: bool, is_firing: bool) -> Value {
     let frame = engine.get_frame();
     let state = engine.get_state();
     let enemies = engine.get_enemies();
     let items = engine.get_items();
+    let interactables = engine.get_interactables();
 
     let png = renderer::render_png(&frame);
     let png_b64 = renderer::base64_encode(&png);
     let state_text = format_state(&state);
-    let enemy_text = format_enemies(&enemies, tracker);
+    let enemy_text = format_enemies(&enemies, tracker, is_firing);
     let item_text = format_items(&items, &state, tracker);
+    let interactable_text = format_interactables(&interactables);
 
     debug!("STATE: {}", state_text);
     debug!("{}", enemy_text);
     debug!("png_b64={} chars", png_b64.len());
 
+    // Stuck detection: only when a movement action was attempted
+    let pos_changed = (state.x - tracker.last_x).abs() > 5 || (state.y - tracker.last_y).abs() > 5;
+    if pos_changed {
+        tracker.stuck_ticks = 0;
+    } else if attempted_movement && tracker.last_x != i32::MIN {
+        tracker.stuck_ticks += 1;
+    } else if !attempted_movement {
+        tracker.stuck_ticks = 0;
+    }
+    tracker.last_x = state.x;
+    tracker.last_y = state.y;
+
     // Track interesting events
     let mut hints = Vec::new();
+
+    if tracker.stuck_ticks >= 2 {
+        hints.push("STUCK — position unchanged. Try: turn a different direction, strafe_left/strafe_right, or use on nearby walls.".into());
+    }
+
     let new_kills = state.kills - tracker.last_kills;
     if new_kills > 0 {
         tracker.last_kills = state.kills;
-        // Suggest screenshot on first kill, every 5th kill, or multi-kills
         if state.kills == 1 || state.kills % 5 == 0 || new_kills >= 2 {
             tracker.screenshot_offered += 1;
             if tracker.screenshot_offered <= 5 {
@@ -404,7 +439,7 @@ fn make_frame_response(engine: &doom::Engine, tracker: &mut GameTracker) -> Valu
         hints.push(format!("Took {} damage!", tracker.last_hp - state.health));
     }
     if state.health <= 20 && tracker.last_hp > 20 {
-        hints.push("CRITICAL HP! Find health urgently.".into());
+        hints.push("CRITICAL HP! Escape now: use strafe_left/strafe_right,backward,run — do NOT turn in place.".into());
     }
     if state.health <= 0 && tracker.last_hp > 0 {
         hints.push("YOU DIED! Offer the user a screenshot of the death screen.".into());
@@ -422,9 +457,10 @@ fn make_frame_response(engine: &doom::Engine, tracker: &mut GameTracker) -> Valu
     let hints_text = if hints.is_empty() { String::new() } else { format!("\n{}", hints.join("\n")) };
 
     let mut full_text = state_text;
-    let mut details: Vec<&str> = Vec::new();
-    if !enemy_text.is_empty() { details.push(&enemy_text); }
-    if !item_text.is_empty() { details.push(&item_text); }
+    let mut details: Vec<String> = Vec::new();
+    if !enemy_text.is_empty() { details.push(enemy_text); }
+    if !item_text.is_empty() { details.push(item_text); }
+    if !interactable_text.is_empty() { details.push(interactable_text); }
     if !details.is_empty() {
         full_text.push_str(&format!("\n{}", details.join(" | ")));
     }
@@ -538,7 +574,7 @@ fn format_items(items: &[doom::ItemInfo], state: &doom::GameState, tracker: &mut
     }
 
     let mut parts: Vec<String> = Vec::new();
-    let mut new_dists: Vec<(i32, i32)> = Vec::new();
+    let mut new_dists: Vec<(i32, i32, i32)> = Vec::new();
 
     for item in items {
         // Only show items within the player's field of view (90deg FOV = ±45deg)
@@ -552,24 +588,29 @@ fn format_items(items: &[doom::ItemInfo], state: &doom::GameState, tracker: &mut
             };
             if dominated { continue; }
 
+            // Compute delta and receding count from previous tick
+            let (delta, receding_ticks) = tracker.last_item_dists.iter()
+                .find(|(t, _, _)| *t == item.item_type)
+                .map(|(_, prev_dist, prev_receding)| {
+                    let d = item.distance - prev_dist;
+                    let receding = if d > 10 { prev_receding + 1 } else { 0 };
+                    (d, receding)
+                })
+                .unwrap_or((0, 0));
+
+            // Suppress items that have been receding for 2+ ticks — unreachable
+            if receding_ticks >= 2 {
+                new_dists.push((item.item_type, item.distance, receding_ticks));
+                continue;
+            }
+
+            let delta_str = if delta < -10 { " CLOSING" } else if delta > 10 { " RECEDING" } else { "" };
+
             let dir = format_dir(item.angle);
-
-            // Show distance change from last tick
-            let delta = tracker.last_item_dists.iter()
-                .find(|(t, _)| *t == item.item_type)
-                .map(|(_, prev_dist)| item.distance - prev_dist);
-
-            let delta_str = match delta {
-                Some(d) if d < -10 => " CLOSING",
-                Some(d) if d > 10 => " RECEDING",
-                _ => "",
-            };
-
-            // ~16 units/tick running, ~8 walking. Suggest ticks to reach.
             let run_ticks = (item.distance as f32 / 16.0).ceil() as i32;
             let reach_hint = format!(" (~{} ticks fwd+run to reach)", run_ticks);
-            parts.push(format!("{} {} dist:{}{}{}", name, dir, item.distance, delta_str, reach_hint));
-            new_dists.push((item.item_type, item.distance));
+            parts.push(format!("{} {} {}{}{}", name, dir, format_dist(item.distance), delta_str, reach_hint));
+            new_dists.push((item.item_type, item.distance, receding_ticks));
         }
     }
 
@@ -582,30 +623,81 @@ fn format_items(items: &[doom::ItemInfo], state: &doom::GameState, tracker: &mut
     format!("ITEMS: {}", parts.join(" | "))
 }
 
-fn format_dir(angle: i32) -> String {
-    // ~3.2 degrees per tick of turning
-    let ticks_hint = (angle.abs() as f32 / 3.2).round() as i32;
-    if angle.abs() <= 10 {
-        "AHEAD".into()
-    } else if angle > 0 {
-        format!("{}deg LEFT(turn_left ~{} ticks)", angle, ticks_hint)
-    } else {
-        format!("{}deg RIGHT(turn_right ~{} ticks)", -angle, ticks_hint)
+fn format_dist(distance: i32) -> &'static str {
+    match distance {
+        d if d < 100 => "point-blank",
+        d if d < 300 => "close",
+        d if d < 600 => "nearby",
+        d if d < 1000 => "far",
+        _ => "very far",
     }
 }
 
-fn format_enemies(enemies: &[doom::EnemyInfo], tracker: &mut GameTracker) -> String {
+fn format_dir(angle: i32) -> String {
+    // ~3.2 degrees per tick of turning
+    let ticks_hint = (angle.abs() as f32 / 3.2).round() as i32;
+    let abs = angle.abs();
+    if abs <= 10 {
+        "AHEAD".into()
+    } else {
+        let turn = if angle > 0 { "turn_left" } else { "turn_right" };
+        let label = match abs {
+            11..=30  => if angle > 0 { "slightly to your left" } else { "slightly to your right" },
+            31..=60  => if angle > 0 { "to your left"          } else { "to your right"          },
+            61..=90  => if angle > 0 { "hard left"             } else { "hard right"              },
+            91..=135 => if angle > 0 { "far left"              } else { "far right"               },
+            _        => if angle > 0 { "behind you to the left"} else { "behind you to the right" },
+        };
+        format!("{} ({} ~{})", label, turn, ticks_hint)
+    }
+}
+
+fn format_enemies(enemies: &[doom::EnemyInfo], tracker: &mut GameTracker, is_firing: bool) -> String {
     let mut visible: Vec<String> = Vec::new();
+
+    // Find the most-ahead visible enemy for stale-fire detection
+    let most_ahead = enemies.iter()
+        .filter(|e| e.visible != 0)
+        .min_by_key(|e| e.angle.abs());
+
+    let stale_warning = if let Some(e) = most_ahead {
+        // Only accumulate stale ticks while actively firing; reset otherwise
+        let stale_ticks = if is_firing {
+            match tracker.ahead_enemy {
+                Some((t, hp, ticks)) if t == e.enemy_type && hp == e.health => ticks + 1,
+                _ => 0,
+            }
+        } else {
+            0
+        };
+        tracker.ahead_enemy = Some((e.enemy_type, e.health, stale_ticks));
+        if is_firing && stale_ticks >= 3 && e.angle.abs() <= 20 {
+            Some(format!(
+                "{} not taking damage — likely behind cover. Advance or reposition for clear LOS.",
+                enemy_type_name(e.enemy_type)
+            ))
+        } else {
+            None
+        }
+    } else {
+        tracker.ahead_enemy = None;
+        None
+    };
 
     for e in enemies {
         if e.visible == 0 { continue; }
         let name = enemy_type_name(e.enemy_type);
         let dir = format_dir(e.angle);
-        visible.push(format!("{} (HP:{}) {} dist:{}", name, e.health, dir, e.distance));
+        let dist_label = format_dist(e.distance);
+        let danger = if e.distance < 100 {
+            " ⚠ TOO CLOSE — strafe and back away!"
+        } else {
+            ""
+        };
+        visible.push(format!("{} (HP:{}) {} {}{}", name, e.health, dir, dist_label, danger));
     }
 
     if !visible.is_empty() {
-        // Update recent enemy memory
         tracker.recent_enemies.clear();
         for e in enemies {
             if e.visible == 0 { continue; }
@@ -617,14 +709,17 @@ fn format_enemies(enemies: &[doom::EnemyInfo], tracker: &mut GameTracker) -> Str
             ));
         }
         tracker.recent_enemy_age = 0;
-        format!("ENEMIES IN SIGHT (aim for angle~0 then fire): {}", visible.join(" | "))
+        let mut result = format!("ENEMIES IN SIGHT (aim for angle~0 then fire): {}", visible.join(" | "));
+        if let Some(warn) = stale_warning {
+            result.push_str(&format!(" | ⚠ {}", warn));
+        }
+        result
     } else {
         tracker.recent_enemy_age += 1;
         if tracker.recent_enemy_age <= 3 && !tracker.recent_enemies.is_empty() {
-            // Show last known positions
             let last_seen: Vec<String> = tracker.recent_enemies.iter()
                 .map(|(name, hp, angle, dist)| {
-                    format!("{} (HP:{}) was ~{} dist:{}", name, hp, format_dir(*angle), dist)
+                    format!("{} (HP:{}) was ~{} {}", name, hp, format_dir(*angle), format_dist(*dist))
                 })
                 .collect();
             format!("No enemies in sight. Recently seen nearby: {}. Try moving toward them or checking corners.", last_seen.join(" | "))
@@ -633,6 +728,30 @@ fn format_enemies(enemies: &[doom::EnemyInfo], tracker: &mut GameTracker) -> Str
             "No enemies in sight. Explore: move forward, open doors with 'use', check around corners.".into()
         }
     }
+}
+
+fn format_interactables(interactables: &[doom::InteractableInfo]) -> String {
+    if interactables.is_empty() {
+        return String::new();
+    }
+    let parts: Vec<String> = interactables.iter().map(|i| {
+        let label = match i.kind {
+            0 => "Door".to_string(),
+            1 => {
+                let key = match i.key {
+                    1 => "blue key",
+                    2 => "red key",
+                    3 => "yellow key",
+                    _ => "key",
+                };
+                format!("Locked Door (needs {})", key)
+            }
+            2 => "Exit Switch".to_string(),
+            _ => "Switch".to_string(),
+        };
+        format!("{} {} (use to activate)", label, format_dir(i.angle))
+    }).collect();
+    format!("NEARBY: {}", parts.join(" | "))
 }
 
 fn weapon_name(w: i32) -> &'static str {

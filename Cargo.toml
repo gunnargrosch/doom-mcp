@@ -1,6 +1,6 @@
 [package]
 name = "doom-mcp"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "Play DOOM via MCP - works with Claude Code, Cursor, and any MCP client"
 license = "MIT"

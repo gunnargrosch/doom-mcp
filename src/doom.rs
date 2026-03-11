@@ -6,6 +6,7 @@ pub const SCREEN_WIDTH: u32 = 320;
 pub const SCREEN_HEIGHT: u32 = 200;
 pub const MAX_ENEMIES: usize = 16;
 pub const MAX_ITEMS: usize = 16;
+pub const MAX_INTERACTABLES: usize = 8;
 pub const MAX_TICKS: i32 = 105;
 
 #[repr(C)]
@@ -44,6 +45,15 @@ pub struct ItemInfo {
 
 #[repr(C)]
 #[derive(Debug, Default, Clone)]
+pub struct InteractableInfo {
+    pub kind: i32,     // 0=door, 1=locked_door, 2=exit
+    pub key: i32,      // 0=none, 1=blue, 2=red, 3=yellow
+    pub distance: i32,
+    pub angle: i32,
+}
+
+#[repr(C)]
+#[derive(Debug, Default, Clone)]
 pub struct EnemyInfo {
     pub enemy_type: i32,
     pub health: i32,
@@ -64,6 +74,7 @@ extern "C" {
     fn mcp_advance_tick();
     fn mcp_get_enemies(enemies: *mut EnemyInfo, max_count: c_int) -> c_int;
     fn mcp_get_items(items: *mut ItemInfo, max_count: c_int) -> c_int;
+    fn mcp_get_interactables(out: *mut InteractableInfo, max_count: c_int) -> c_int;
     fn mcp_new_game(skill: c_int, episode: c_int, map: c_int);
 }
 
@@ -197,6 +208,13 @@ impl Engine {
         let count = unsafe { mcp_get_items(items.as_mut_ptr(), MAX_ITEMS as c_int) };
         items.truncate(count as usize);
         items
+    }
+
+    pub fn get_interactables(&self) -> Vec<InteractableInfo> {
+        let mut out = vec![InteractableInfo::default(); MAX_INTERACTABLES];
+        let count = unsafe { mcp_get_interactables(out.as_mut_ptr(), MAX_INTERACTABLES as c_int) };
+        out.truncate(count as usize);
+        out
     }
 
     pub fn restart(&mut self, skill: i32, episode: i32, map: i32) {

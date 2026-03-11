@@ -3,9 +3,9 @@ use flate2::write::ZlibEncoder;
 use flate2::Compression;
 use std::io::Write;
 
-const THUMBNAIL_WIDTH: u32 = 160;
-const THUMBNAIL_HEIGHT: u32 = 100;
-const PALETTE_COLORS: usize = 64;
+const THUMBNAIL_WIDTH: u32 = 200;
+const THUMBNAIL_HEIGHT: u32 = 125;
+const PALETTE_COLORS: usize = 216;
 
 // --- Frame Scaling ---
 
@@ -32,18 +32,25 @@ pub fn scale_frame(frame: &Frame, new_width: u32, new_height: u32) -> Frame {
 
 // --- PNG Renderer (palette mode for minimal size) ---
 
-/// Quantize an RGB pixel to a 6-bit index (2 bits per channel, 64 colors)
+/// Quantize an RGB pixel to a 216-color web-safe palette index (6×6×6 cube, 51-step levels)
 fn quantize(r: u8, g: u8, b: u8) -> u8 {
-    ((r >> 6) << 4) | ((g >> 6) << 2) | (b >> 6)
+    let ri = ((r as u16 * 5 + 127) / 255) as u8;
+    let gi = ((g as u16 * 5 + 127) / 255) as u8;
+    let bi = ((b as u16 * 5 + 127) / 255) as u8;
+    ri * 36 + gi * 6 + bi
 }
 
-/// Build the 64-entry RGB palette (4 levels per channel: 0, 85, 170, 255)
+/// Build the 216-entry web-safe palette (6 levels per channel: 0, 51, 102, 153, 204, 255)
 fn build_palette() -> Vec<u8> {
     let mut pal = Vec::with_capacity(PALETTE_COLORS * 3);
-    for i in 0..PALETTE_COLORS as u8 {
-        pal.push(((i >> 4) & 3) * 85);
-        pal.push(((i >> 2) & 3) * 85);
-        pal.push((i & 3) * 85);
+    for r in 0..6u8 {
+        for g in 0..6u8 {
+            for b in 0..6u8 {
+                pal.push(r * 51);
+                pal.push(g * 51);
+                pal.push(b * 51);
+            }
+        }
     }
     pal
 }
