@@ -21,7 +21,7 @@ Play DOOM in Claude Code, Cursor, or any MCP-compatible client. The AI sees the 
   Sprinting down the hallway... I can see an opening ahead.
 
   HP:100 Armor:0 | Pistol (key:2) | Ammo: 50b 0s 0r 0c | Kills:0 | E1M1
-  ENEMIES IN SIGHT: Imp (HP:60) to your left (turn_left ~9) nearby
+  ENEMIES IN SIGHT (aim for angle~0 then fire): Imp (HP:60) to your left (turn_left ~9) nearby
 
   There's an Imp to the left! Turning to face it...
 
@@ -30,11 +30,12 @@ Play DOOM in Claude Code, Cursor, or any MCP-compatible client. The AI sees the 
   Aimed and firing!
 
   HP:100 Armor:0 | Pistol (key:2) | Ammo: 47b 0s 0r 0c | Kills:0 | E1M1
-  ENEMIES IN SIGHT: Imp (HP:15) AHEAD close
+  ENEMIES IN SIGHT (aim for angle~0 then fire): Imp (HP:15) AHEAD close
 
   Hit! The Imp is wounded (HP:15). One more burst should finish it.
 
   HP:95 Armor:0 | Pistol (key:2) | Ammo: 44b 0s 0r 0c | Kills:1 | E1M1
+  ITEMS: Stimpack (+10 HP) slightly to your right (turn_right ~4) point-blank (~3 ticks fwd+run to reach)
   1 kill! Want to see a screenshot?
 ```
 
