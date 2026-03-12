@@ -39,6 +39,8 @@ Play DOOM in Claude Code, Cursor, or any MCP-compatible client. The AI sees the 
   1 kill! Want to see a screenshot?
 ```
 
+Read the [blog post](https://dev.to/gunnargrosch/can-it-run-doom-playing-doom-in-claude-code-with-doom-mcp-1ck1) for the full story.
+
 ---
 
 ## Table of Contents
