@@ -1,5 +1,6 @@
 # DOOM via MCP
 
+[![MCP Registry](https://img.shields.io/badge/MCP_Registry-published-blue)](https://registry.modelcontextprotocol.io)
 [![npm version](https://img.shields.io/npm/v/doom-mcp)](https://www.npmjs.com/package/doom-mcp)
 [![npm downloads](https://img.shields.io/npm/dm/doom-mcp)](https://www.npmjs.com/package/doom-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
